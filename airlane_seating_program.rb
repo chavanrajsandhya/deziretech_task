@@ -2,6 +2,7 @@
 require 'json'
 
 class AirlineSeating
+  $passengers_allocated = 0
   attr_accessor :excess_booking, :max_seats, :passengers_count, :message
 
   def initialize(*args)
@@ -10,15 +11,16 @@ class AirlineSeating
       @max_seats = @input_seats.inject(0) { |sum, x| sum += x[0] * x[1] }
       @excess_booking = true if @max_seats < @passengers_count
       @max_columns = @input_seats.map(&:last).max
-      @passengers_allocated = 0
+      #@passengers_allocated = 0
+      @prepare_seating = PrepareSeating.new
     end
   end
 
   def arrangement
-    prepare_seats
-    allocate_aisle_seats
-    allocate_window_seats
-    allocate_center_seats
+    @prepare_seating.send :prepare_seats, @input_seats, @max_columns
+    @prepare_seating.send :allocate_aisle_seats, @passengers_count, @max_seats
+    @prepare_seating.send :allocate_window_seats, @passengers_count, @max_seats
+    @prepare_seating.send :allocate_center_seats, @passengers_count, @max_seats
   end
 
   def validate_input(args)
@@ -41,18 +43,22 @@ class AirlineSeating
     return "The second argument should be a positive integer" unless @passengers_count.is_a?(Integer)
   end
 
+end
+
+
+class PrepareSeating
+
   private
 
-  def prepare_seats
-    @available_seats = @input_seats.each_with_object([]).with_index do |(arr, seats), index|
+  def prepare_seats(input_seats, max_columns)
+    @available_seats = input_seats.each_with_object([]).with_index do |(arr, seats), index|
       seats << (1..arr[1]).map { |x| Array.new(arr[0]) { 'N' } }
     end
-    @sorted_seats = (1..@max_columns).each_with_object([]).with_index do |(x, arr), index|
+    @sorted_seats = (1..max_columns).each_with_object([]).with_index do |(x, arr), index|
       arr << @available_seats.map { |x| x[index] }
     end
   end
-
-  def allocate_aisle_seats
+  def allocate_aisle_seats(passengers_count, max_seats)
     @aisle_seats = @sorted_seats.each_with_object([]) do |elem_array, res_array|
       res_array << if elem_array.nil?
         nil
@@ -62,19 +68,19 @@ class AirlineSeating
             nil
           else
             if index == 0
-              @passengers_allocated += 1
-              basic_elem_array[-1] = @passengers_allocated <= @passengers_count ? @passengers_allocated.to_s.rjust(@max_seats.to_s.size, "0") : 'X'*@max_seats.to_s.size
+              $passengers_allocated += 1
+              basic_elem_array[-1] = $passengers_allocated <= passengers_count ? $passengers_allocated.to_s.rjust(max_seats.to_s.size, "0") : 'X'*max_seats.to_s.size
             elsif index == elem_array.size - 1
               unless basic_elem_array.size == 1
-                @passengers_allocated += 1
-                basic_elem_array[0] = @passengers_allocated <= @passengers_count ? @passengers_allocated.to_s.rjust(@max_seats.to_s.size, "0") : 'X'*@max_seats.to_s.size
+                $passengers_allocated += 1
+                basic_elem_array[0] = $passengers_allocated <= passengers_count ? $passengers_allocated.to_s.rjust(max_seats.to_s.size, "0") : 'X'*max_seats.to_s.size
               end
             else
-              @passengers_allocated += 1
-              basic_elem_array[0] = @passengers_allocated <= @passengers_count ? @passengers_allocated.to_s.rjust(@max_seats.to_s.size, "0") : 'X'*@max_seats.to_s.size
+              $passengers_allocated += 1
+              basic_elem_array[0] = $passengers_allocated <= passengers_count ? $passengers_allocated.to_s.rjust(max_seats.to_s.size, "0") : 'X'*max_seats.to_s.size
               unless basic_elem_array.size == 1
-                @passengers_allocated += 1
-                basic_elem_array[-1] = @passengers_allocated <= @passengers_count ? @passengers_allocated.to_s.rjust(@max_seats.to_s.size, "0") : 'X'*@max_seats.to_s.size
+                $passengers_allocated += 1
+                basic_elem_array[-1] = $passengers_allocated <= passengers_count ? $passengers_allocated.to_s.rjust(max_seats.to_s.size, "0") : 'X'*max_seats.to_s.size
               end
             end
             basic_elem_array
@@ -84,7 +90,7 @@ class AirlineSeating
     end
   end
 
-  def allocate_window_seats
+  def allocate_window_seats(passengers_count, max_seats)
     @window_seats = @aisle_seats.each_with_object([]) do |elem_array, res_array|
       res_array << if elem_array.nil?
         nil
@@ -94,11 +100,11 @@ class AirlineSeating
             nil
           else
             if index == 0
-              @passengers_allocated += 1
-              basic_elem_array[0] = @passengers_allocated <= @passengers_count ? @passengers_allocated.to_s.rjust(@max_seats.to_s.size, "0") : 'X'*@max_seats.to_s.size
+              $passengers_allocated += 1
+              basic_elem_array[0] = $passengers_allocated <= passengers_count ? $passengers_allocated.to_s.rjust(max_seats.to_s.size, "0") : 'X'*max_seats.to_s.size
             elsif index == elem_array.size - 1
-              @passengers_allocated += 1
-              basic_elem_array[-1] = @passengers_allocated <= @passengers_count ? @passengers_allocated.to_s.rjust(@max_seats.to_s.size, "0") : 'X'*@max_seats.to_s.size
+              $passengers_allocated += 1
+              basic_elem_array[-1] = $passengers_allocated <= passengers_count ? $passengers_allocated.to_s.rjust(max_seats.to_s.size, "0") : 'X'*max_seats.to_s.size
             end
             basic_elem_array
           end
@@ -107,7 +113,7 @@ class AirlineSeating
     end
   end
 
-  def allocate_center_seats
+  def allocate_center_seats(passengers_count, max_seats)
     @center_seats = @window_seats.each_with_object([]) do |elem_array, res_array|
       res_array << if elem_array.nil?
         nil
@@ -118,8 +124,8 @@ class AirlineSeating
           else
             if basic_elem_array.size > 2
               (1..basic_elem_array.size - 2).each do |x|
-                @passengers_allocated += 1
-                basic_elem_array[x] = @passengers_allocated <= @passengers_count ? @passengers_allocated.to_s.rjust(@max_seats.to_s.size, "0") : 'X'*@max_seats.to_s.size
+                $passengers_allocated += 1
+                basic_elem_array[x] = $passengers_allocated <= passengers_count ? $passengers_allocated.to_s.rjust(max_seats.to_s.size, "0") : 'X'*max_seats.to_s.size
               end
             end
             basic_elem_array
